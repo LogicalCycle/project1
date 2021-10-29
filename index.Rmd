@@ -5,9 +5,6 @@ date: ''
 output:
   html_document:
     toc: yes
-    toc_float:
-      collapsed: no
-      smooth_scroll: yes
   pdf_document:
     toc: no
 ---
@@ -19,15 +16,25 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Lucas Amud loa267
 
 #### Introduction 
 
 Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
 
+I will be working with two datasets. One encompasses fuel data for vehicles and the other covers government spending in different sectors. The vehicles dataset was sourced from the US Department of Energy (www.fueleconomy.gov). The infrastructure dataset was sourced from the US Bureau of Economic Analysis hosted by the US Department of Commerce (www.bea.gov). The vehicles dataset has a lot of columns. As a general overview, it provides information on make, model, year, city mpg, highway mpg, combined mpg, and many more statistics that give more insight into the vehicles and how environmentally-friendly they may be. The infrastructure dataset shows the real gross investment in 2012 chained million dollars for different sectors for every year. 2012 chained million dollars just means that the dollar amounts have been adjusted for inflation, with 2012 being the year that had no adjustment. This allows for fair comparison as inflation would positively skew more recent values compared to older ones. 
+
+Being an economics major, I thought it would be interesting to see government spending over time. I am also interested in cars so I looked for ways to connect these two subjects. An association that I would expect is that as government spending increased, the efficiency of cars improved. Admittedly, if a relationship exists, it could certainly be due to technological advances over time, but those would also benefit from government spending. It should also be interesting to see what other results arise from this exploration.  
+
 ```{R}
 # read your datasets in here, e.g., with read_csv()
-
+library(tidyverse)
+vehicles <- read_csv("https://www.fueleconomy.gov/feg/epadata/vehicles.csv")
+infrastructure <- read_csv("~/project1/infrastructure-data-may-2020.csv")
+infrastructure <- infrastructure %>% rename(type=Type)
+#83 col before
+vehicles <- vehicles %>% select(-charge120, -fuelType2, -rangeA, -evMotor, -mfrCode, -c240Dscr, -c240bDscr, -startStop) #removes rows that are all 0s
+#75 col after
 ```
 
 #### Tidying: Reshaping
@@ -36,56 +43,145 @@ If your datasets are tidy already, demonstrate that you can reshape data with pi
 
 ```{R}
 # your tidying code (if applicable; can also wait until wrangling section)
-```
 
+infr <- infrastructure %>% pivot_longer(cols=-1, names_to="year", values_to="gross_inv") %>% distinct() %>% pivot_wider(names_from="type", values_from = "gross_inv", values_fn = list(gross_inv = mean)) %>% arrange(desc(year))
+
+#real gross investment in 2012 chained million dollars
+```
+In this section, I tidy the infrastructure dataset. For context, it shows each individual year as a column, and the rows represent the type or sector. I first pivot_longer, turning the year and values of every year (and sector) into their own columns (year and gross_inv). However, this results in the type being repeated for every row of year. Thus, I pivot_wider to get the sector names as individual columns, and pull the values from the just-created gross_inv column. This results in a column for year and columns for the sectors, with the values under the sector names matching up with the government spending for that year. 
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+glimpse(infr)
+glimpse(vehicles)
+infr <- infr %>% mutate(year = as.character(year))
+vehicles <- vehicles %>% mutate(year=as.character(year))
+#convert both columns to the same data type (from dbl)
 
-# your joining code
+merged <- inner_join(vehicles, infr, by="year")
+merged <- merged %>% relocate(year, .before = barrels08) %>% arrange(desc(year))
+
+sum(infr$year %in% vehicles$year)
+#is vehicles$year in infr$year
+
+sum(vehicles$year %in% infr$year)
+
+vehicles %>% summarize(n_distinct(year))
+infr %>% summarize(n_distinct(year))
+merged %>% summarize(n_distinct(year))
+
+#which in left not on right for anti
+
+anti_join(infr,vehicles, by="year") %>% distinct(year) %>% arrange(year) #year in infr not in vehicles
+anti_join(vehicles,infr, by="year") %>% relocate(year,.before=barrels08) %>% distinct(year) #year in vehicles not in infr
+
+
+merged
+
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+The infrastructure (infr) and the vehicles (vehicles) dataset were joined using inner_join by the variable "year". The two datasets cover very different information. An inner_join would be the most effective here because it only keeps the overlapping information (where the year in one matches the year in the other). 
+
+The infrastructure dataset had 71 rows and 68 columns before the join. The vehicles dataset had 44,187 rows and 75 columns before the join. 
+
+The rows that are in the merged dataset (38,248) represent the years that overlap in each dataset. This means that vehicles lost 44,187 - 38,248 = 5939 rows. Vehicles had 39 values for year and the merged dataset has 34, so vehicles lost 39 - 34 = 5 distinct values for year.
+
+The dataset infr had 71 'year' values (oriiginal distinct IDs). The merged dataset has 34. Thus, infr lost 71 - 34 = 37 values for year. This dataset does not repeat the years, so 37 rows were lost. 
+
+The infr datasets has no year values after 2017, so the years 2018-2022 are in vehicles but not in infr (5 distinct years dropped from vehicles). Similarly, the vehicles dataset has no year values before 1984, so the years 1947-1983 are in infr but not in vehicles (37 distinct years dropped from infr).
+
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+library(knitr)
+library(kableExtra)
+delete_zero <- function(x){
+  mean(x==0,na.rm=T)<0.75
+}
 
-# your wrangling code
 
-# your wrangling code
+merged1 <- merged %>% mutate(year = as.numeric(year)) %>% mutate(electric=(ghgScore==10|fuelType=="Electricity")) %>% filter(electric==F) %>% select_if(delete_zero) %>% select(-createdOn, -modifiedOn) #only electric and hybrids score 10 on EPA GHG
+
+delete_nas <- function(x){
+  mean(is.na(x)) < 0.4
+}
+
+n_nas <- function(x){
+  sum(is.na(x))
+}
+
+merged1 <- merged1 %>% select_if(delete_nas) #final selects columns that have NA ratio less than 0.4
+
+merged1
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+To start off, I cleaned up the merged dataset by trying to remove most electric vehicles (I use mutate to create a logical column that determines whether or not most cars are electric, and filtered by those that have a false value for this). I also only selected columns that have a value of 0 less than 25% of the time by using the created delete_zero function. Tables used in visualizations were also created using this altered dataset. 
+
+```{R}
+merged1 %>% group_by(make,model, year) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var),na.rm=T) %>% relocate(n,.after=var) #avg mpg per model per year with sd and var
+
+modelavgmpg<- merged1 %>% group_by(make, model) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var),na.rm=T) %>% relocate(n,.after=var) #avg mpg per model (overall) with sd, var, and count (n)
+
+kable(modelavgmpg%>%arrange(desc(avgmpg)), caption = "AvgMpg per Model per Make in Order of Best Avgmpg")%>% kable_classic(full_width = F, html_font = "Arial") %>% row_spec(1)%>% scroll_box(width = "800px", height = "800px")
+
+kable(modelavgmpg %>% group_by(make) %>% summarize(avgmpg=mean(avgmpg)) %>% filter(str_detect(make,"(.)\\1")) %>% distinct(make,avgmpg) %>% arrange(desc(avgmpg)), caption="AvgMpg of Makes with Repeating Letters in Order of Best AvgMpg", digits=2) %>% row_spec(1) 
+#all makes with repeating letters, arranged by highest avgmpg
+
+make_total <- merged1 %>% select(year,matches('gas|petroleum'),make,model,comb08) %>% mutate(total_gas = rowSums(across(.cols=matches('gas|petroleum')))) %>% group_by(make,year,total_gas,model) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var,median=median),na.rm=T) %>% relocate(n,.after=var) %>% relocate(model, .before=year) %>% relocate(year,.before=make) %>% mutate(na_count = n_nas(model)) 
+#make, year, totalgas, avgmpg
+
+year_gas <- merged1 %>% select(year,matches('gas|petroleum'),comb08) %>% mutate(total_gas = rowSums(across(.cols=matches('gas|petroleum')))) %>% group_by(year,total_gas) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var,median=median),na.rm=T) %>% relocate(n,.after=var) %>% mutate(na_count = n_nas(avgmpg)) # final no make no model, just year total_gas; does the rowSum count as a function of another variable???
+
+year_gas %>% kbl() %>% kable_material() %>% scroll_box(width = "800px", height = "800px")
+
+
+camaro_mpg1 <- make_total %>% filter(str_detect(make,"Chevrolet|Dodge"), str_detect(model,"Camaro|Challenger"), between(year, 2011,2016)) %>% group_by(year, make) %>% summarize_at("avgmpg", .funs = list(avgmpg=mean))  #how to keep model????
+camaro_mpg1 %>% kbl() %>% kable_classic_2()
+
+tmh <- make_total %>% filter(str_detect(make, "Honda|Toyota|Mazda")) 
+
+merged1 %>% filter(str_detect(model, "Camaro")) %>% filter(comb08>20) %>% group_by(year,cylinders)  %>% filter(year>2010, year<2017) %>% select(make,model, comb08)%>% arrange(desc(comb08)) %>%kbl() %>% kable_classic()#4 cyl have high comb08
+
+
+```
+
+From here, I used summarize to find the AvgMpg (using the combined mpg of each make and model) to get an average miles per gallon number that I could use (comb08 had a value for several models even if the same name). Since there were many models per make per year, standard deviation and variance values were also calculated. One of the unique findings was that Grumman Olson is the most efficient car make with a repeating letter in its name, and Bugatti is the least efficient (this was done using regex). Another interesting finding is that the Toyota Prius C is the most efficient model (in terms of avgmpg) among gas and hybrid cars.
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
-```
 
-Your discussion of plot 1
+coeff=2000
+year_gas %>% ggplot(aes(x=year)) + 
+  geom_line(aes(y=avgmpg, color = "Avg MPG")) +
+  geom_line(aes(y=total_gas/coeff, color ="Gov't Spending"),label="Total Gas") +  
+  geom_point(aes(y=avgmpg),size=1) + 
+  geom_point(aes(y=total_gas/coeff),size=1) + 
+  scale_x_continuous(n.breaks = 10)+
+  scale_y_continuous(sec.axis = sec_axis(~.*coeff, name="Gas and Petroleum Spending ($ Million USD"))+
+  theme_light() +ggtitle("Total Oil & Gas Spending and AvgMpg over the Years")+ylab("Average Miles Per Gallon")+xlab("Year")
+#year vs total gas and avgmpg
+
+```
+Plot 1:
+This line plot shows time in years on the x-axis, average miles per gallon (avgmpg) on the y-axis, and total government spending in gas and petroleum on the secondary y-axis (scales adjusted accordingly). I initially theorized that increased government spending would lead to improvements in average mile per gallon over time. However, it seems as though AvgMpg were fairly constant from 1987 to around 2010 where it starts trending upwards. Around the same time, government spending in petroleum and gas sectors went up sharply from around $30000 million to over \$55000 million from 2010 to 2014. Nonetheless, the improvements in average miles per gallon were most likely caused by the development of hybrid cars in the early 2000s. 
 
 ```{R}
-# your plot 2
-```
+camaro_mpg1 %>% ggplot(aes(year,avgmpg, fill=make)) + geom_bar(stat="summary",position="dodge") +scale_x_continuous(n.breaks = 6) + scale_y_continuous(breaks=(seq(10, 23, by = 2))) + coord_cartesian(ylim=c(15,23)) + scale_fill_discrete(name = "Model")+ scale_fill_discrete(labels = c("Chevrolet Camaro", "Dodge Challenger")) +theme_classic()+ggtitle("Chevrolet Camaro vs. Dodge Challenger AvgMpg from 2011 to 2016") +ylab("Average Miles Per Gallon") +xlab("Year")
+#camaro released 4 cyl 2016
 
-Your discussion of plot 2
+```
+Plot 2:
+This bar plot shows the Average Miles Per Gallon on the y-axis and the years on the x-axis. This plot compares the average miles per gallon of the Chevrolet Camaro and the Dodge Challenger models in each year from 2011 to 2016. The Dodge Challenger saw very little variation in AvgMpg from 2011 to 2016, being around 18mpg for every year. The Chevrolet Camaro did have greater variance between the years, with clear spikes in 2011 and 2016. From 2012 to 2015, the Camaro and the Challenger were fairly close in AvgMpg at around 18-19. In 2016, Chevrolet released a more efficient Camaro model with a 4 cylinder engine. This is shown in the last table of the Wrangling section. This new model acted as an outlier and positively skewed the AvgMpg for Camaro in 2016 to around 21.8
+
 
 ```{R}
-# your plot 3
+tmh %>% ggplot(aes(x=make, y=avgmpg,fill=make))+geom_boxplot()+
+  theme_linedraw() + scale_y_continuous(breaks=(seq(5, 55, by = 5))) +xlab("Make") +ylab("Avg MPG")+theme(legend.position = "none")+ggtitle("Box Plots of AvgMpg for Honda, Mazda, Toyota")
 ```
-
-Your discussion of plot 3
-
-#### Concluding Remarks
-
-If any!
-
-
-
+Plot 3:
+This last plot has three vehicle makes on the x-axis (Honda, Mazda, Toyota) and average miles per gallon on the y-axis. Each make has its own box plot, providing insight into the spread of efficiency within the makes. Honda’s 50th percentile (mean) lies around 23.5 mpg, Mazda’s is around 22 mpg, and Toyota’s is also around 22 mpg. Mazda has the tightest spread of the three makes, with an interquartile range of about 6 units (Toyota’s and Honda’s is about 8 units). Honda has the greatest number of outliers, shown by the points above the box plot and also indicated by the longer whisker.
 
