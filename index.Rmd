@@ -20,8 +20,6 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
-
 I will be working with two datasets. One encompasses fuel data for vehicles and the other covers government spending in different sectors. The vehicles dataset was sourced from the US Department of Energy (www.fueleconomy.gov). The infrastructure dataset was sourced from the US Bureau of Economic Analysis hosted by the US Department of Commerce (www.bea.gov). The vehicles dataset has a lot of columns. As a general overview, it provides information on make, model, year, city mpg, highway mpg, combined mpg, and many more statistics that give more insight into the vehicles and how environmentally-friendly they may be. The infrastructure dataset shows the real gross investment in 2012 chained million dollars for different sectors for every year. 2012 chained million dollars just means that the dollar amounts have been adjusted for inflation, with 2012 being the year that had no adjustment. This allows for fair comparison as inflation would positively skew more recent values compared to older ones. 
 
 Being an economics major, I thought it would be interesting to see government spending over time. I am also interested in cars so I looked for ways to connect these two subjects. An association that I would expect is that as government spending increased, the efficiency of cars improved. Admittedly, if a relationship exists, it could certainly be due to technological advances over time, but those would also benefit from government spending. It should also be interesting to see what other results arise from this exploration.  
@@ -39,7 +37,7 @@ vehicles <- vehicles %>% select(-charge120, -fuelType2, -rangeA, -evMotor, -mfrC
 
 #### Tidying: Reshaping
 
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy).
 
 ```{R}
 # your tidying code (if applicable; can also wait until wrangling section)
@@ -132,12 +130,12 @@ kable(modelavgmpg %>% group_by(make) %>% summarize(avgmpg=mean(avgmpg)) %>% filt
 make_total <- merged1 %>% select(year,matches('gas|petroleum'),make,model,comb08) %>% mutate(total_gas = rowSums(across(.cols=matches('gas|petroleum')))) %>% group_by(make,year,total_gas,model) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var,median=median),na.rm=T) %>% relocate(n,.after=var) %>% relocate(model, .before=year) %>% relocate(year,.before=make) %>% mutate(na_count = n_nas(model)) 
 #make, year, totalgas, avgmpg
 
-year_gas <- merged1 %>% select(year,matches('gas|petroleum'),comb08) %>% mutate(total_gas = rowSums(across(.cols=matches('gas|petroleum')))) %>% group_by(year,total_gas) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var,median=median),na.rm=T) %>% relocate(n,.after=var) %>% mutate(na_count = n_nas(avgmpg)) # final no make no model, just year total_gas; does the rowSum count as a function of another variable???
+year_gas <- merged1 %>% select(year,matches('gas|petroleum'),comb08) %>% mutate(total_gas = rowSums(across(.cols=matches('gas|petroleum')))) %>% group_by(year,total_gas) %>% group_by(n = n(), add = TRUE) %>% summarize_at("comb08", .funs = list(avgmpg=mean,sd=sd,var=var,median=median),na.rm=T) %>% relocate(n,.after=var) %>% mutate(na_count = n_nas(avgmpg)) # final no make no model, just year total_gas
 
 year_gas %>% kbl() %>% kable_material() %>% scroll_box(width = "800px", height = "800px")
 
 
-camaro_mpg1 <- make_total %>% filter(str_detect(make,"Chevrolet|Dodge"), str_detect(model,"Camaro|Challenger"), between(year, 2011,2016)) %>% group_by(year, make) %>% summarize_at("avgmpg", .funs = list(avgmpg=mean))  #how to keep model????
+camaro_mpg1 <- make_total %>% filter(str_detect(make,"Chevrolet|Dodge"), str_detect(model,"Camaro|Challenger"), between(year, 2011,2016)) %>% group_by(year, make) %>% summarize_at("avgmpg", .funs = list(avgmpg=mean))
 camaro_mpg1 %>% kbl() %>% kable_classic_2()
 
 tmh <- make_total %>% filter(str_detect(make, "Honda|Toyota|Mazda")) 
@@ -147,7 +145,7 @@ merged1 %>% filter(str_detect(model, "Camaro")) %>% filter(comb08>20) %>% group_
 
 ```
 
-From here, I used summarize to find the AvgMpg (using the combined mpg of each make and model) to get an average miles per gallon number that I could use (comb08 had a value for several models even if the same name). Since there were many models per make per year, standard deviation and variance values were also calculated. One of the unique findings was that Grumman Olson is the most efficient car make with a repeating letter in its name, and Bugatti is the least efficient (this was done using regex). Another interesting finding is that the Toyota Prius C is the most efficient model (in terms of avgmpg) among gas and hybrid cars.
+From here, I used summarize to find the AvgMpg (using the combined mpg of each make and model) to get an average miles per gallon number that I could use (comb08 had a value for several models even if the same name). Since there were many models per make per year, standard deviation and variance values were also calculated. This information was used to create tables that focused on several different things, including specific makes and models. Additionally, rowSum was used to create a column that contained the value of government spending specifically in sectors that contain gas or petroleum in the name. When it came to the tables, one of the unique findings was that Grumman Olson is the most efficient car make with a repeating letter in its name, and Bugatti is the least efficient (this was done using regex). Another interesting finding is that the Toyota Prius C is the most efficient model (in terms of avgmpg) among gas and hybrid cars.
 
 
 #### Visualizing
